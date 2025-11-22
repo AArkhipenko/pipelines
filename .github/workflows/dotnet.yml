@@ -138,8 +138,8 @@ jobs:
                   file: ./Dockerfile
                   push: true
                   tags: |
-                      ${{ secrets.DOCKER_USERNAME }}/${{ steps.validate_repo.outputs.repo_name }}-${{ steps.version.outputs.version }}
-                      ${{ secrets.DOCKER_USERNAME }}/${{ steps.validate_repo.outputs.repo_name }}-latest
+                      ${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.validate_repo.outputs.repo_name }}-${{ steps.version.outputs.version }}
+                      ${{ secrets.DOCKERHUB_USERNAME }}/${{ steps.validate_repo.outputs.repo_name }}-latest
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
                   build-args: |
