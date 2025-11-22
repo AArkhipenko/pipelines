@@ -52,6 +52,7 @@ on:
             repository_name:
                 description: "Название репозитория (обязательно)"
                 required: true
+                default: AArkhipenko/user-service
                 type: string
         outputs:
             build_version:
@@ -71,7 +72,7 @@ jobs:
         steps:
             - name: Validate repository
               id: validate_repo
-              uses: AArkhipenko/pipeline/.github/actions/validate-repository
+              uses: AArkhipenko/pipelines/.github/actions/validate-repository@main
               with:
                   repository_name: ${{ inputs.repository_name }}
 
@@ -99,7 +100,7 @@ jobs:
             - name: Calculate version
               id: version
               if: inputs.build_type == 'release'
-              uses: AArkhipenko/pipeline/.github/actions/calculate-version
+              uses: AArkhipenko/pipelines/.github/actions/calculate-version@main
               with:
                   branch_name: ${{ inputs.branch_name }}
                   repository_name: ${{ inputs.repository_name }}
@@ -144,6 +145,6 @@ jobs:
 
             - name: Create Git tag
               if: inputs.build_type == 'release'
-              uses: AArkhipenko/pipeline/.github/actions/create-git-tag
+              uses: AArkhipenko/pipelines/.github/actions/create-git-tag@main
               with:
                   version: ${{ steps.version.outputs.version }}
