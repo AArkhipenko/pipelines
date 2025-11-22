@@ -31,6 +31,7 @@ on:
             repository_name:
                 description: "Название репозитория (обязательно)"
                 required: true
+                default: AArkhipenko/user-service
                 type: string
     workflow_call:
         inputs:
@@ -135,13 +136,14 @@ jobs:
               with:
                   context: .
                   file: ./Dockerfile
-                  platforms: linux/amd64,linux/arm64
                   push: true
                   tags: |
-                      ${{ steps.docker_image.outputs.image_tag }}
-                      ${{ steps.validate_repo.outputs.image_name }}:latest
+                      ${{ secrets.DOCKER_USERNAME }}/${{ steps.validate_repo.outputs.repo_name }}-${{ steps.version.outputs.version }}
+                      ${{ secrets.DOCKER_USERNAME }}/${{ steps.validate_repo.outputs.repo_name }}-latest
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
+                  build-args: |
+                      BUILD_VERSION=${{ steps.version.outputs.version }}
 
             - name: Create Git tag
               if: inputs.build_type == 'release'
