@@ -69,11 +69,11 @@ jobs:
             docker_image: ${{ steps.docker_image.outputs.image }}
 
         steps:
-            - name: Validate repository name
+            - name: Validate repository
               id: validate_repo
-              run: |
-                  chmod +x .github/scripts/validate-repository.sh
-                  .github/scripts/validate-repository.sh "${{ inputs.repository_name }}"
+              uses: ./.github/actions/validate-repository
+              with:
+                  repository_name: ${{ inputs.repository_name }}
 
             - name: Checkout repository
               uses: actions/checkout@v6.0.0
@@ -96,12 +96,13 @@ jobs:
             - name: Run tests
               run: dotnet test --configuration Release --no-build --verbosity normal
 
-            - name: Calculate version (for release only)
+            - name: Calculate version
               id: version
               if: inputs.build_type == 'release'
-              run: |
-                  chmod +x .github/scripts/calculate-version.sh
-                  .github/scripts/calculate-version.sh "${{ inputs.branch_name }}" "${{ inputs.repository_name }}"
+              uses: ./.github/actions/calculate-version
+              with:
+                  branch_name: ${{ inputs.branch_name }}
+                  repository_name: ${{ inputs.repository_name }}
 
             - name: Publish
               if: inputs.build_type == 'release'
@@ -116,7 +117,7 @@ jobs:
                   echo "image=$IMAGE_TAG" >> $GITHUB_OUTPUT
                   echo "Docker image: $IMAGE_TAG"
 
-            - name: Set up Docker Buildx
+            - name: Setup Docker Buildx
               if: inputs.build_type == 'release'
               uses: docker/setup-buildx-action@v3
 
@@ -141,8 +142,8 @@ jobs:
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
 
-            - name: Create Git tag (if not exists)
+            - name: Create Git tag
               if: inputs.build_type == 'release'
-              run: |
-                  chmod +x .github/scripts/create-git-tag.sh
-                  .github/scripts/create-git-tag.sh "${{ steps.version.outputs.version }}" "${{ secrets.GITHUB_TOKEN }}"
+              uses: ./.github/actions/create-git-tag
+              with:
+                  version: ${{ steps.version.outputs.version }}
