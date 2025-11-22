@@ -71,7 +71,7 @@ jobs:
         steps:
             - name: Validate repository
               id: validate_repo
-              uses: ./.github/actions/validate-repository
+              uses: AArkhipenko/pipeline/.github/actions/validate-repository
               with:
                   repository_name: ${{ inputs.repository_name }}
 
@@ -99,7 +99,7 @@ jobs:
             - name: Calculate version
               id: version
               if: inputs.build_type == 'release'
-              uses: ./.github/actions/calculate-version
+              uses: AArkhipenko/pipeline/.github/actions/calculate-version
               with:
                   branch_name: ${{ inputs.branch_name }}
                   repository_name: ${{ inputs.repository_name }}
@@ -144,6 +144,6 @@ jobs:
 
             - name: Create Git tag
               if: inputs.build_type == 'release'
-              uses: ./.github/actions/create-git-tag
+              uses: AArkhipenko/pipeline/.github/actions/create-git-tag
               with:
                   version: ${{ steps.version.outputs.version }}
