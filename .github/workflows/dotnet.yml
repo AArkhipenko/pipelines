@@ -1,0 +1,198 @@
+name: .NET Core Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      dotnet_version:
+        description: 'Версия .NET Core'
+        required: true
+        default: '7.0.x'
+        type: choice
+        options:
+        - '7.0.x'
+        - '8.0.x'
+        - '9.0.x'
+      build_type:
+        description: 'Тип сборки'
+        required: true
+        default: 'build'
+        type: choice
+        options:
+        - build
+        - release
+      branch_name:
+        description: 'Название ветки'
+        required: true
+        default: 'develop'
+        type: choice
+        options:
+        - main
+        - develop
+      repository_name:
+        description: 'Название репозитория (обязательно)'
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      dotnet_version:
+        description: 'Версия .NET Core'
+        required: true
+        default: '7.0.x'
+        type: string
+      build_type:
+        description: 'Тип сборки'
+        required: true
+        default: 'build'
+        type: string
+      branch_name:
+        description: 'Название ветки'
+        required: true
+        default: 'develop'
+        type: string
+      repository_name:
+        description: 'Название репозитория (обязательно)'
+        required: true
+        type: string
+    outputs:
+      build_version:
+        description: "Версия сборки"
+        value: ${{ jobs.build.outputs.build_version }}
+      docker_image:
+        description: "Docker образ (только для release)"
+        value: ${{ jobs.build.outputs.docker_image }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      build_version: ${{ steps.version.outputs.version }}
+      docker_image: ${{ steps.docker_image.outputs.image }}
+    
+    steps:
+    - name: Validate repository name
+      id: validate_repo
+      run: |
+        # Проверяем, что repository_name передан и не пустой
+        if [ -z "${{ inputs.repository_name }}" ]; then
+          echo "Error: Repository name is required but was not provided"
+          echo "Please provide 'repository_name' input parameter"
+          exit 1
+        fi
+        
+        REPO_NAME="${{ inputs.repository_name }}"
+        echo "Success: Using repository: $REPO_NAME"
+        
+        # Извлекаем только имя репозитория без владельца
+        REPO_NAME_ONLY=$(echo "$REPO_NAME" | sed 's|.*/||')
+        
+        # Проверяем, что имя репозитория валидное
+        if [ -z "$REPO_NAME_ONLY" ]; then
+          echo "Error: Invalid repository name format: $REPO_NAME"
+          exit 1
+        fi
+        
+        echo "Repository name: $REPO_NAME_ONLY"
+        echo "repo_name=$REPO_NAME_ONLY" >> $GITHUB_OUTPUT
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.branch_name }}
+        fetch-depth: 0
+
+    - name: Setup .NET Core
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ inputs.dotnet_version }}
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Run tests
+      run: dotnet test --configuration Release --no-build --verbosity normal
+      
+    - name: Calculate version
+      id: version
+      if: inputs.build_type == 'release'
+      run: |
+        # Функция для вычисления версии
+        calculate_version() {
+          # Получаем последний тег
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Last tag: $LAST_TAG"
+          
+          # Проверяем, есть ли тег на текущем коммите
+          CURRENT_COMMIT=$(git rev-parse HEAD)
+          TAG_ON_CURRENT_COMMIT=$(git tag --points-at HEAD)
+          
+          if [ -n "$TAG_ON_CURRENT_COMMIT" ]; then
+            # Если тег на текущем коммите, используем его
+            VERSION="$TAG_ON_CURRENT_COMMIT"
+            echo "Using tag on current commit: $VERSION"
+          else
+            # Если тега нет, увеличиваем patch версию
+            IFS='.' read -ra VERSION_PARTS <<< "${LAST_TAG#v}"
+            MAJOR=${VERSION_PARTS[0]:-0}
+            MINOR=${VERSION_PARTS[1]:-0}
+            PATCH=${VERSION_PARTS[2]:-0}
+            
+            NEW_PATCH=$((PATCH + 1))
+            VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+            echo "Increased version: $VERSION"
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Final version: $VERSION"
+        }
+        
+        calculate_version
+
+    - name: Publish
+      if: inputs.build_type == 'release'
+      run: dotnet publish --configuration Release --no-build
+
+    - name: Prepare Docker image info
+      id: docker_image
+      if: inputs.build_type == 'release'
+      run: |
+        IMAGE_NAME="${{ steps.validate_repo.outputs.repo_name }}"
+        IMAGE_TAG="$IMAGE_NAME:${{ steps.version.outputs.version }}"
+        echo "image=$IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "Docker image: $IMAGE_TAG"
+
+    - name: Set up Docker Buildx
+      if: inputs.build_type == 'release'
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ vars.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+    
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: ${{ env.DOCKER_IMAGE_NAME }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        
+    - name: Build and push Docker image
+      if: inputs.build_type == 'release'
+      uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: ./Dockerfile
+        platforms: linux/amd64,linux/arm64
+        push: true
+        tags: |
+          ${{ steps.docker_image.outputs.image_tag }}
+          ${{ steps.validate_repo.outputs.image_name }}:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
