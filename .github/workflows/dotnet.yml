@@ -215,7 +215,7 @@ jobs:
               with:
                   repository: ${{ inputs.repository_name }}
                   ref: ${{ inputs.branch_name }}
-                  token: ${{ secrets.GITHUB_TOKEN }}
+                  token: ${{ secrets.PIPELINE_PAT }}
 
             - name: Create Git tag
               uses: AArkhipenko/pipelines/.github/actions/create-git-tag@main
