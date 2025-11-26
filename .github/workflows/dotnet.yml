@@ -63,6 +63,13 @@ on:
                 description: Docker образ (только для release)
                 value: ${{ jobs.publish.outputs.docker_image }}
 
+# Явное задание прав GITHUB_TOKEN
+permissions:
+    contents: write # для создания тегов и релизов
+    packages: read  # для публикации пакетов
+    actions: read   # для чтения действий
+    checks: read    # для чтения проверок
+
 jobs:
     preparation:
         name: Preparation
