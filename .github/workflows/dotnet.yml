@@ -84,6 +84,7 @@ jobs:
                   repository: ${{ inputs.repository_name }}
                   ref: ${{ inputs.branch_name }}
                   fetch-depth: 0
+                  token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Validate repository
               id: validate_repo
@@ -109,6 +110,7 @@ jobs:
               with:
                   repository: ${{ inputs.repository_name }}
                   ref: ${{ inputs.branch_name }}
+                  token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Setup .NET Core
               uses: actions/setup-dotnet@v3
@@ -131,6 +133,7 @@ jobs:
               with:
                   repository: ${{ inputs.repository_name }}
                   ref: ${{ inputs.branch_name }}
+                  token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Setup .NET Core
               uses: actions/setup-dotnet@v3
@@ -161,6 +164,7 @@ jobs:
               with:
                   repository: ${{ inputs.repository_name }}
                   ref: ${{ inputs.branch_name }}
+                  token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Setup .NET Core
               uses: actions/setup-dotnet@v3
@@ -218,6 +222,7 @@ jobs:
               with:
                   repository: ${{ inputs.repository_name }}
                   ref: ${{ inputs.branch_name }}
+                  token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Create Git tag
               uses: AArkhipenko/pipelines/.github/actions/create-git-tag@main
