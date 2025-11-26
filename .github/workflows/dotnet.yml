@@ -164,6 +164,9 @@ jobs:
               with:
                   dotnet-version: ${{ inputs.dotnet_version }}
 
+            - name: Restore dependencies
+              run: dotnet restore
+
             - name: Publish application
               run: dotnet publish --configuration Release --no-restore
 
