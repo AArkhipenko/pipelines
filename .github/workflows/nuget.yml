@@ -1,0 +1,183 @@
+name: Nuget build and publish
+
+on:
+    workflow_dispatch:
+        inputs:
+            dotnet_version:
+                description: Версия .NET Core
+                required: true
+                default: 7.0.x
+                type: choice
+                options:
+                    - 7.0.x
+                    - 8.0.x
+                    - 9.0.x
+            build_type:
+                description: Тип сборки
+                required: true
+                default: build
+                type: choice
+                options:
+                    - build
+                    - release
+            branch_name:
+                description: Название ветки
+                required: true
+                default: main
+                type: choice
+                options:
+                    - main
+                    - develop
+            repository_name:
+                description: Название репозитория (обязательно)
+                required: true
+                default: AArkhipenko/AArkhipenko.UserHelper
+                type: string
+    workflow_call:
+        inputs:
+            dotnet_version:
+                description: Версия .NET Core
+                required: true
+                default: 7.0.x
+                type: string
+            build_type:
+                description: Тип сборки
+                required: true
+                default: build
+                type: string
+            branch_name:
+                description: Название ветки
+                required: true
+                default: main
+                type: string
+            repository_name:
+                description: Название репозитория (обязательно)
+                required: true
+                default: AArkhipenko/AArkhipenko.UserHelper
+                type: string
+        outputs:
+            build_version:
+                description: Версия сборки
+                value: ${{ jobs.versioning.outputs.build_version }}
+            nuget_version:
+                description: Nuget версия (только для release)
+                value: ${{ jobs.publish.outputs.nuget_version }}
+
+jobs:
+    preparation:
+        name: Preparation
+        runs-on: ubuntu-24.04
+        outputs:
+            repo_name: ${{ steps.validate_repo.outputs.repo_name }}
+            calculated_version: ${{ steps.calculate_version.outputs.version }}
+            calculated_v_version: ${{ steps.calculate_version.outputs.v_version }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  repository: ${{ inputs.repository_name }}
+                  ref: ${{ inputs.branch_name }}
+                  fetch-depth: 0
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Validate repository
+              id: validate_repo
+              uses: AArkhipenko/pipelines/.github/actions/validate-repository@main
+              with:
+                  repository_name: ${{ inputs.repository_name }}
+
+            - name: Calculate version (release only)
+              id: calculate_version
+              if: inputs.build_type == 'release'
+              uses: AArkhipenko/pipelines/.github/actions/calculate-version@main
+              with:
+                  branch_name: ${{ inputs.branch_name }}
+                  repository_name: ${{ inputs.repository_name }}
+
+    build:
+        name: Build
+        runs-on: ubuntu-24.04
+        needs: preparation
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  repository: ${{ inputs.repository_name }}
+                  ref: ${{ inputs.branch_name }}
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Setup .NET Core
+              uses: actions/setup-dotnet@v3
+              with:
+                  dotnet-version: ${{ inputs.dotnet_version }}
+
+            - name: Restore dependencies
+              run: dotnet restore
+
+            - name: Build application
+              run: dotnet build --configuration Release --no-restore
+
+    publish:
+        name: Publish Artifact
+        runs-on: ubuntu-24.04
+        needs:
+            - preparation
+        if: inputs.build_type == 'release'
+        outputs:
+            nuget_version: ${{ steps.prepare_docker_info.outputs.docker_image }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  repository: ${{ inputs.repository_name }}
+                  ref: ${{ inputs.branch_name }}
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Setup .NET Core
+              uses: actions/setup-dotnet@v3
+              with:
+                  dotnet-version: ${{ inputs.dotnet_version }}
+
+            - name: Restore dependencies
+              run: dotnet restore
+
+            - name: Pack nuget
+              run: dotnet pack --configuration Release --output ./nupkg --no-restore -p:Version=${{ needs.preparation.outputs.calculated_version }}
+
+            - name: Publish to NuGet
+              run: dotnet nuget push ./nupkg/*.nupkg --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.NUGET_API_KEY }} --skip-duplicate
+
+            - name: Prepare Nuget info
+              id: prepare_nuget_info
+              run: |
+                  NUGET_NAME=${{ needs.preparation.outputs.repo_name }}:${{ needs.preparation.outputs.calculated_v_version }}
+                  echo nuget_version=$NUGET_NAME >> $GITHUB_OUTPUT
+                  echo Nuget: $NUGET_NAME
+
+    versioning:
+        name: Versioning
+        runs-on: ubuntu-24.04
+        needs:
+            - preparation
+            - publish
+        if: inputs.build_type == 'release'
+        outputs:
+            build_version: ${{ steps.output_version.outputs.build_version }}
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  repository: ${{ inputs.repository_name }}
+                  ref: ${{ inputs.branch_name }}
+                  token: ${{ secrets.PIPELINE_PAT }}
+
+            - name: Create Git tag
+              uses: AArkhipenko/pipelines/.github/actions/create-git-tag@main
+              with:
+                  version: ${{ needs.preparation.outputs.calculated_v_version }}
+
+            - name: Output version info
+              id: output_version
+              run: |
+                  echo build_version=${{ needs.preparation.outputs.calculated_v_version }} >> $GITHUB_OUTPUT
+                  echo ✅ Version ${{ needs.preparation.outputs.calculated_v_version }} tagged and recorded
