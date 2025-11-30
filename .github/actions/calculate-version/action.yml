@@ -1,17 +1,20 @@
-name: 'Calculate Version'
-description: 'Calculates version based on branch and repository'
+name: Calculate Version
+description: Calculates version based on branch and repository
 inputs:
   branch_name:
-    description: 'Branch name'
+    description: Branch name
     required: true
-    default: 'develop'
+    default: develop
   repository_name:
-    description: 'Repository name in format owner/repo'
+    description: Repository name in format owner/repo
     required: true
 outputs:
   version:
-    description: 'Calculated version'
+    description: Calculated version
     value: ${{ steps.calculate.outputs.version }}
+  v_version:
+    description: Calculated version with v
+    value: ${{ steps.calculate.outputs.v_version }}
 
 runs:
   using: "composite"
@@ -22,43 +25,97 @@ runs:
       run: |
         BRANCH_NAME="${{ inputs.branch_name }}"
         REPOSITORY_NAME="${{ inputs.repository_name }}"
-        
+
         echo "🔍 Calculating version for branch: $BRANCH_NAME in repository: $REPOSITORY_NAME"
-        
+
         # Проверяем, что repository_name передан и не пустой
         if [ -z "$REPOSITORY_NAME" ]; then
           echo "❌ Error: Repository name is required but was not provided"
           exit 1
         fi
-        
+
         echo "✅ Using repository: $REPOSITORY_NAME"
-        
+
         # Получаем последний тег на текущем коммите
         CURRENT_COMMIT=$(git rev-parse HEAD)
         TAG_ON_CURRENT_COMMIT=$(git tag --points-at HEAD)
-        
+
         if [ -n "$TAG_ON_CURRENT_COMMIT" ]; then
           # Если тег на текущем коммите, используем его (для всех веток)
           VERSION="$TAG_ON_CURRENT_COMMIT"
           echo "🎯 Using tag on current commit: $VERSION"
         else
-          if [ "$BRANCH_NAME" = "develop" ]; then
-            # Логика для develop ветки
-            LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-            echo "📌 Last tag: $LAST_TAG"
+          if [ "$BRANCH_NAME" = "develop" ] || [ "$BRANCH_NAME" = "dev" ]; then
+            # НОВАЯ ЛОГИКА ДЛЯ DEV ВЕТКИ
+            echo "🔍 Getting latest versions from main and dev branches..."
             
-            # Увеличиваем patch версию
-            IFS='.' read -ra VERSION_PARTS <<< "${LAST_TAG#v}"
+            # Получаем последний тег из ветки main
+            MAIN_TAG=$(git ls-remote --tags "https://github.com/$REPOSITORY_NAME.git" | grep -v "{}" | grep -E "v[0-9]+\.[0-9]+\.[0-9]+$" | sort -V | tail -n1 | sed 's|.*refs/tags/||')
+            
+            # Получаем последний тег из ветки develop/dev (локально)
+            DEV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            
+            if [ -z "$MAIN_TAG" ]; then
+              MAIN_TAG="v0.0.0"
+              echo "⚠️  No main tags found in repository $REPOSITORY_NAME, using default: $MAIN_TAG"
+            else
+              echo "📌 Latest main tag: $MAIN_TAG"
+            fi
+            
+            echo "📌 Latest dev tag: $DEV_TAG"
+            
+            # Сравниваем версии и выбираем более старую
+            compare_versions() {
+              local v1="${1#v}" v2="${2#v}"
+              local IFS=.
+              local i ver1=($v1) ver2=($v2)
+              
+              for ((i=0; i<${#ver1[@]}; i++)); do
+                if [[ -z ${ver2[i]} ]]; then
+                  echo "1"
+                  return
+                fi
+                if ((10#${ver1[i]} > 10#${ver2[i]})); then
+                  echo "1"
+                  return
+                fi
+                if ((10#${ver1[i]} < 10#${ver2[i]})); then
+                  echo "-1"
+                  return
+                fi
+              done
+              echo "0"
+            }
+            
+            COMPARE_RESULT=$(compare_versions "$MAIN_TAG" "$DEV_TAG")
+            
+            if [ "$COMPARE_RESULT" -eq "1" ]; then
+              # MAIN_TAG новее, используем DEV_TAG (более старую)
+              BASE_TAG="$DEV_TAG"
+              echo "📊 Main tag is newer, using dev tag as base: $BASE_TAG"
+            elif [ "$COMPARE_RESULT" -eq "-1" ]; then
+              # DEV_TAG новее, используем MAIN_TAG (более старую)
+              BASE_TAG="$MAIN_TAG"
+              echo "📊 Dev tag is newer, using main tag as base: $BASE_TAG"
+            else
+              # Версии равны, используем любую
+              BASE_TAG="$MAIN_TAG"
+              echo "📊 Versions are equal, using: $BASE_TAG"
+            fi
+            
+            # Увеличиваем patch версию у выбранной базовой версии
+            IFS=. read -ra VERSION_PARTS <<< "${BASE_TAG#v}"
             MAJOR=${VERSION_PARTS[0]:-0}
             MINOR=${VERSION_PARTS[1]:-0}
             PATCH=${VERSION_PARTS[2]:-0}
             
             NEW_PATCH=$((PATCH + 1))
-            VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
-            echo "🔢 Increased patch version: $VERSION"
+            VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+            V_VERSION="v${VERSION}"
+            echo "🔢 Increased patch version of base tag $BASE_TAG: $VERSION"
             
           elif [ "$BRANCH_NAME" = "main" ]; then
-            # Логика для main ветки
+            # Логика для main ветки (остается без изменений)
             echo "🔍 Looking for latest tag on develop branch in repository: $REPOSITORY_NAME..."
             
             # Получаем последний тег из ветки develop указанного репозитория
@@ -72,30 +129,33 @@ runs:
             fi
             
             # Увеличиваем minor версию
-            IFS='.' read -ra VERSION_PARTS <<< "${DEVELOP_TAG#v}"
+            IFS=. read -ra VERSION_PARTS <<< "${DEVELOP_TAG#v}"
             MAJOR=${VERSION_PARTS[0]:-0}
             MINOR=${VERSION_PARTS[1]:-0}
             PATCH=${VERSION_PARTS[2]:-0}
             
             NEW_MINOR=$((MINOR + 1))
-            VERSION="v${MAJOR}.${NEW_MINOR}.0"
+            VERSION="${MAJOR}.${NEW_MINOR}.0"
+            V_VERSION="v${VERSION}"
             echo "🔢 Increased minor version: $VERSION"
             
           else
-            # Для других веток используем логику develop
+            # Для других веток используем старую логику develop
             LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
             echo "📌 Last tag: $LAST_TAG"
             
-            IFS='.' read -ra VERSION_PARTS <<< "${LAST_TAG#v}"
+            IFS=. read -ra VERSION_PARTS <<< "${LAST_TAG#v}"
             MAJOR=${VERSION_PARTS[0]:-0}
             MINOR=${VERSION_PARTS[1]:-0}
             PATCH=${VERSION_PARTS[2]:-0}
             
             NEW_PATCH=$((PATCH + 1))
-            VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+            VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+            V_VERSION="v${VERSION}"
             echo "🔢 Increased patch version for branch $BRANCH_NAME: $VERSION"
           fi
         fi
-        
+
         echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "v_version=$V_VERSION" >> $GITHUB_OUTPUT
         echo "✅ Final version: $VERSION for repository: $REPOSITORY_NAME"

@@ -1,4 +1,4 @@
-name: .NET Core Build
+name: .NET Core build and publish
 
 on:
     workflow_dispatch:
@@ -31,7 +31,6 @@ on:
             repository_name:
                 description: Название репозитория (обязательно)
                 required: true
-                default: AArkhipenko/user-service
                 type: string
     workflow_call:
         inputs:
@@ -53,7 +52,6 @@ on:
             repository_name:
                 description: Название репозитория (обязательно)
                 required: true
-                default: AArkhipenko/user-service
                 type: string
         outputs:
             build_version:
@@ -70,6 +68,7 @@ jobs:
         outputs:
             repo_name: ${{ steps.validate_repo.outputs.repo_name }}
             calculated_version: ${{ steps.calculate_version.outputs.version }}
+            calculated_v_version: ${{ steps.calculate_version.outputs.v_version }}
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
@@ -187,17 +186,17 @@ jobs:
                   platforms: linux/amd64,linux/arm64
                   push: true
                   tags: |
-                      ${{ vars.DOCKERHUB_USERNAME }}/${{ needs.preparation.outputs.repo_name }}:${{ needs.preparation.outputs.calculated_version }}
+                      ${{ vars.DOCKERHUB_USERNAME }}/${{ needs.preparation.outputs.repo_name }}:${{ needs.preparation.outputs.calculated_v_version }}
                       ${{ vars.DOCKERHUB_USERNAME }}/${{ needs.preparation.outputs.repo_name }}
                   cache-from: type=gha
                   cache-to: type=gha,mode=max
                   build-args: |
-                      BUILD_VERSION=${{ needs.preparation.outputs.calculated_version }}
+                      BUILD_VERSION=${{ needs.preparation.outputs.calculated_v_version }}
 
             - name: Prepare Docker image info
               id: prepare_docker_info
               run: |
-                  IMAGE_NAME=${{ needs.preparation.outputs.repo_name }}:${{ needs.preparation.outputs.calculated_version }}
+                  IMAGE_NAME=${{ needs.preparation.outputs.repo_name }}:${{ needs.preparation.outputs.calculated_v_version }}
                   echo docker_image=$IMAGE_NAME >> $GITHUB_OUTPUT
                   echo Docker image: $IMAGE_NAME
     versioning:
@@ -220,10 +219,10 @@ jobs:
             - name: Create Git tag
               uses: AArkhipenko/pipelines/.github/actions/create-git-tag@main
               with:
-                  version: ${{ needs.preparation.outputs.calculated_version }}
+                  version: ${{ needs.preparation.outputs.calculated_v_version }}
 
             - name: Output version info
               id: output_version
               run: |
-                  echo build_version=${{ needs.preparation.outputs.calculated_version }} >> $GITHUB_OUTPUT
-                  echo ✅ Version ${{ needs.preparation.outputs.calculated_version }} tagged and recorded
+                  echo build_version=${{ needs.preparation.outputs.calculated_v_version }} >> $GITHUB_OUTPUT
+                  echo ✅ Version ${{ needs.preparation.outputs.calculated_v_version }} tagged and recorded
