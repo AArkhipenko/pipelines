@@ -42,7 +42,8 @@ runs:
 
         if [ -n "$TAG_ON_CURRENT_COMMIT" ]; then
           # Если тег на текущем коммите, используем его (для всех веток)
-          VERSION="$TAG_ON_CURRENT_COMMIT"
+          VERSION="${TAG_ON_CURRENT_COMMIT#v}"
+          V_VERSION="$TAG_ON_CURRENT_COMMIT"
           echo "🎯 Using tag on current commit: $VERSION"
         else
           if [ "$BRANCH_NAME" = "develop" ] || [ "$BRANCH_NAME" = "dev" ]; then
