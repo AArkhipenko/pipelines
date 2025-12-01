@@ -46,15 +46,14 @@ runs:
           V_VERSION="$TAG_ON_CURRENT_COMMIT"
           echo "🎯 Using tag on current commit: $VERSION"
         else
-          if [ "$BRANCH_NAME" = "develop" ] || [ "$BRANCH_NAME" = "dev" ]; then
-            # НОВАЯ ЛОГИКА ДЛЯ DEV ВЕТКИ
-            echo "🔍 Getting latest versions from main and dev branches..."
+          if [ "$BRANCH_NAME" = "develop" ]; then
+            echo "🔍 Getting latest versions from main and develop branches..."
             
             # Получаем последний тег из ветки main
             MAIN_TAG=$(git ls-remote --tags "https://github.com/$REPOSITORY_NAME.git" | grep -v "{}" | grep -E "v[0-9]+\.[0-9]+\.[0-9]+$" | sort -V | tail -n1 | sed 's|.*refs/tags/||')
             
-            # Получаем последний тег из ветки develop/dev (локально)
-            DEV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            # Получаем последний тег из ветки develop (локально)
+            DEVELOP_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
             
             if [ -z "$MAIN_TAG" ]; then
               MAIN_TAG="v0.0.0"
@@ -63,7 +62,7 @@ runs:
               echo "📌 Latest main tag: $MAIN_TAG"
             fi
             
-            echo "📌 Latest dev tag: $DEV_TAG"
+            echo "📌 Latest develop tag: $DEVELOP_TAG"
             
             # Сравниваем версии и выбираем более старую
             compare_versions() {
@@ -88,16 +87,16 @@ runs:
               echo "0"
             }
             
-            COMPARE_RESULT=$(compare_versions "$MAIN_TAG" "$DEV_TAG")
+            COMPARE_RESULT=$(compare_versions "$MAIN_TAG" "$DEVELOP_TAG")
             
             if [ "$COMPARE_RESULT" -eq "1" ]; then
-              # MAIN_TAG новее, используем DEV_TAG (более старую)
-              BASE_TAG="$DEV_TAG"
-              echo "📊 Main tag is newer, using dev tag as base: $BASE_TAG"
+              # MAIN_TAG новее, используем DEVELOP_TAG (более старую)
+              BASE_TAG="$DEVELOP_TAG"
+              echo "📊 Main tag is newer, using develop tag as base: $BASE_TAG"
             elif [ "$COMPARE_RESULT" -eq "-1" ]; then
-              # DEV_TAG новее, используем MAIN_TAG (более старую)
+              # DEVELOP_TAG новее, используем MAIN_TAG (более старую)
               BASE_TAG="$MAIN_TAG"
-              echo "📊 Dev tag is newer, using main tag as base: $BASE_TAG"
+              echo "📊 Develop tag is newer, using main tag as base: $BASE_TAG"
             else
               # Версии равны, используем любую
               BASE_TAG="$MAIN_TAG"
@@ -120,7 +119,15 @@ runs:
             echo "🔍 Looking for latest tag on develop branch in repository: $REPOSITORY_NAME..."
             
             # Получаем последний тег из ветки develop указанного репозитория
-            DEVELOP_TAG=$(git ls-remote --tags "https://github.com/$REPOSITORY_NAME.git" | grep -v "{}" | grep -E "v[0-9]+\.[0-9]+\.[0-9]+$" | sort -V | tail -n1 | sed 's|.*refs/tags/||')
+            # Попытка получить тег, игнорируя ошибки
+            DEVELOP_TAG=$(git ls-remote --tags "https://github.com/$REPOSITORY_NAME.git" 2>/dev/null | grep -v "{}" | grep -E "v[0-9]+\.[0-9]+\.[0-9]+$" | sort -V | tail -n1 | sed 's|.*refs/tags/||')
+
+            # Проверка, получено ли значение
+            if [ -z "$DEVELOP_TAG" ]; then
+                echo "Не удалось получить теги или ветка develop отсутствует"
+                # Установить значение по умолчанию или предпринять другие действия
+                DEVELOP_TAG="v0.0.0"  # или другое значение по умолчанию
+            fi
             
             if [ -z "$DEVELOP_TAG" ]; then
               DEVELOP_TAG="v0.0.0"
