@@ -122,6 +122,7 @@ jobs:
         runs-on: ubuntu-24.04
         needs:
             - preparation
+            - build
         if: inputs.build_type == 'release'
         outputs:
             nuget_version: ${{ steps.prepare_docker_info.outputs.docker_image }}
