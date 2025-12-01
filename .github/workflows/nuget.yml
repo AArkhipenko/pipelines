@@ -27,11 +27,9 @@ on:
                 type: choice
                 options:
                     - main
-                    - develop
             repository_name:
                 description: Название репозитория (обязательно)
                 required: true
-                default: AArkhipenko/AArkhipenko.UserHelper
                 type: string
     workflow_call:
         inputs:
